@@ -1,0 +1,20 @@
+# Dependencies and build artifacts
+node_modules
+npm-debug.log*
+
+# Environment and secrets
+.env
+.env.*
+
+# VCS and CI
+.git
+.gitignore
+
+# OS / editor junk
+.DS_Store
+*.swp
+
+# Tests, docs, and non-API code (if building from repo root by mistake)
+frontend/
+README.md
+start.sh
