@@ -36,11 +36,16 @@ const attendanceSchema = new mongoose.Schema({
     type: Boolean,
     required: true
   },
-  ministry: {
-    type: String,
-    required: function() {
-      return this.isMemberOfMinistry === true;
-    }
+  ministries: {
+    type: [String],
+    validate: {
+      validator: function(arr) {
+        if (!this.isMemberOfMinistry) return true;
+        return Array.isArray(arr) && arr.length > 0;
+      },
+      message: 'Ministries are required when isMemberOfMinistry is true'
+    },
+    default: []
   },
   timestamp: {
     type: Date,
@@ -66,7 +71,7 @@ app.get('/', (req, res) => {
 // Create new attendance record
 app.post('/api/attendance', async (req, res) => {
   try {
-    const { email, fullName, contact, isMemberOfMinistry, ministry } = req.body;
+    let { email, fullName, contact, isMemberOfMinistry, ministries, ministry } = req.body;
 
     // Validation
     if (!email || !fullName || isMemberOfMinistry === undefined) {
@@ -76,10 +81,17 @@ app.post('/api/attendance', async (req, res) => {
       });
     }
 
-    if (isMemberOfMinistry && !ministry) {
-      return res.status(400).json({ 
-        error: 'Ministry is required when isMemberOfMinistry is true'
-      });
+    // Coerce ministries: support legacy 'ministry' string
+    if (isMemberOfMinistry) {
+      if (!ministries && ministry) ministries = [ministry];
+      if (typeof ministries === 'string') ministries = [ministries];
+      if (!Array.isArray(ministries) || ministries.length === 0) {
+        return res.status(400).json({
+          error: 'Ministries are required when isMemberOfMinistry is true'
+        });
+      }
+    } else {
+      ministries = [];
     }
 
     const attendance = new Attendance({
@@ -87,7 +99,7 @@ app.post('/api/attendance', async (req, res) => {
       fullName,
       contact,
       isMemberOfMinistry,
-      ministry: isMemberOfMinistry ? ministry : null
+      ministries
     });
 
     await attendance.save();
@@ -118,7 +130,8 @@ app.get('/api/attendance', async (req, res) => {
     }
 
     if (ministry) {
-      query.ministry = ministry;
+      // filter records that include the ministry in 'ministries'
+      query.ministries = ministry;
     }
 
     const records = await Attendance.find(query).sort({ timestamp: -1 });
@@ -186,7 +199,8 @@ app.get('/api/stats', async (req, res) => {
     
     const ministryBreakdown = await Attendance.aggregate([
       { $match: { isMemberOfMinistry: true } },
-      { $group: { _id: '$ministry', count: { $sum: 1 } } },
+      { $unwind: '$ministries' },
+      { $group: { _id: '$ministries', count: { $sum: 1 } } },
       { $sort: { count: -1 } }
     ]);
 
